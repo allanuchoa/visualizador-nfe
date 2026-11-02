@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visualizador de NF-e - Allan Workbench</title>
+  <meta name="description" content="Leitor de XML de NF-e (modelo 55) e NFC-e (modelo 65): emitente, destinatário, itens, tributos e protocolo. O arquivo é lido no navegador e não é enviado.">
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Fontes Oficiais -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Supabase JS Client SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <!-- Portao de sessao -->
+  <div id="boot" class="boot">
+    <p id="boot-text">Verificando sessão...</p>
+    <button id="boot-retry" class="btn btn-secondary" type="button" hidden>Recarregar</button>
+  </div>
+
+  <main id="app" class="container" hidden>
+
+    <header class="tool-head">
+      <div class="tool-head-text">
+        <h1>Visualizador de NF-e</h1>
+        <p>
+          Leitura do XML da NF-e (modelo 55) e da NFC-e (modelo 65): emitente, destinatário,
+          itens, tributos e protocolo. O arquivo é lido no navegador e não é enviado.
+        </p>
+      </div>
+      <div class="toolbar">
+        <input type="file" id="file" accept=".xml,text/xml" hidden>
+        <button id="btn-open" class="btn btn-primary" type="button">Importar XML</button>
+        <button id="btn-sample" class="btn btn-secondary" type="button">Carregar exemplo</button>
+        <button id="btn-json" class="btn btn-secondary" type="button" disabled>Exportar JSON</button>
+        <button id="btn-print" class="btn btn-secondary" type="button" disabled>Imprimir / PDF</button>
+      </div>
+    </header>
+
+    <!-- Entrada de arquivo -->
+    <div id="drop" class="drop" tabindex="0" role="button"
+         aria-label="Selecionar um arquivo XML de nota fiscal">
+      <span class="drop-title">Arraste o XML aqui ou clique para escolher</span>
+      <span class="drop-sub">NF-e 55 e NFC-e 65 &middot; o arquivo não sai do navegador</span>
+      <span id="file-chip" class="file-chip" hidden></span>
+    </div>
+
+    <div id="alert" class="alert" role="alert" hidden>
+      <span id="alert-text"></span>
+      <button id="alert-close" class="alert-close" type="button" aria-label="Fechar aviso">&times;</button>
+    </div>
+
+    <p id="empty" class="empty">
+      Nenhum documento carregado. Importe um XML ou use o exemplo para ver o layout.
+    </p>
+
+    <section id="doc" hidden>
+
+      <!-- Resumo -->
+      <div class="hero">
+        <div class="hero-main">
+          <div class="hero-tags">
+            <span id="pill-model" class="pill"></span>
+            <span id="pill-status" class="pill"></span>
+            <span id="hero-number" class="hero-number"></span>
+          </div>
+          <h2 id="hero-emitter"></h2>
+          <div class="hero-route">
+            <span>Cliente: <strong id="hero-client"></strong></span>
+            <span class="dot" aria-hidden="true">&middot;</span>
+            <span id="hero-date"></span>
+            <span class="dot" aria-hidden="true">&middot;</span>
+            <span class="mono" id="hero-key"></span>
+            <button id="btn-copy" class="link-btn" type="button">Copiar chave</button>
+          </div>
+        </div>
+        <div class="hero-total">
+          <span class="eyebrow">Valor total</span>
+          <strong id="hero-total"></strong>
+        </div>
+      </div>
+
+      <!-- Abas -->
+      <div class="tabs" role="tablist" aria-label="Seções da nota">
+        <button class="tab is-active" type="button" role="tab" data-tab="geral"
+                aria-selected="true" aria-controls="panel-geral">Visão geral</button>
+        <button class="tab" type="button" role="tab" data-tab="itens"
+                aria-selected="false" aria-controls="panel-itens">Itens (<span id="tab-item-count">0</span>)</button>
+        <button class="tab" type="button" role="tab" data-tab="tributos"
+                aria-selected="false" aria-controls="panel-tributos">Tributação</button>
+        <button class="tab" type="button" role="tab" data-tab="protocolo"
+                aria-selected="false" aria-controls="panel-protocolo">Protocolo e adicionais</button>
+      </div>
+
+      <div class="panels">
+
+        <!-- Visao geral -->
+        <div class="panel is-active" id="panel-geral" role="tabpanel" aria-label="Visão geral">
+          <div class="grid-2">
+            <section class="card">
+              <h3 class="card-title">Emitente <span class="tag">Origem</span></h3>
+              <div class="row"><span class="row-label">Razão social</span><span class="row-value" id="emit-nome"></span></div>
+              <div class="row"><span class="row-label">CNPJ / CPF</span><span class="row-value" id="emit-doc"></span></div>
+              <div class="row"><span class="row-label">Inscrição estadual</span><span class="row-value" id="emit-ie"></span></div>
+              <div class="row"><span class="row-label">Endereço</span><span class="row-value" id="emit-endereco"></span></div>
+              <div class="row"><span class="row-label">Bairro e cidade</span><span class="row-value" id="emit-cidade"></span></div>
+              <div class="row"><span class="row-label">CEP</span><span class="row-value" id="emit-cep"></span></div>
+              <div class="row"><span class="row-label">Telefone</span><span class="row-value" id="emit-fone"></span></div>
+            </section>
+
+            <section class="card">
+              <h3 class="card-title">Destinatário <span class="tag">Destino</span></h3>
+              <div class="row"><span class="row-label">Nome</span><span class="row-value" id="dest-nome"></span></div>
+              <div class="row"><span class="row-label">CNPJ / CPF</span><span class="row-value" id="dest-doc"></span></div>
+              <div class="row"><span class="row-label">E-mail</span><span class="row-value" id="dest-email"></span></div>
+              <div class="row"><span class="row-label">Inscrição estadual</span><span class="row-value" id="dest-ie"></span></div>
+              <div class="row"><span class="row-label">Localidade</span><span class="row-value" id="dest-cidade"></span></div>
+            </section>
+
+            <section class="card">
+              <h3 class="card-title">Resumo financeiro</h3>
+              <div id="payments"></div>
+              <div class="row"><span class="row-label">Total em mercadorias</span><span class="row-value" id="tot-prod"></span></div>
+              <div class="row"><span class="row-label">Frete</span><span class="row-value" id="tot-frete"></span></div>
+              <div class="row"><span class="row-label">Descontos</span><span class="row-value" id="tot-desc"></span></div>
+              <div class="row is-total"><span class="row-label">Valor líquido</span><span class="row-value" id="tot-nf"></span></div>
+            </section>
+
+            <section class="card">
+              <h3 class="card-title">Metadados</h3>
+              <div class="row"><span class="row-label">Modelo / série</span><span class="row-value" id="meta-modelo"></span></div>
+              <div class="row"><span class="row-label">Número</span><span class="row-value" id="meta-numero"></span></div>
+              <div class="row"><span class="row-label">Emissão</span><span class="row-value" id="meta-emissao"></span></div>
+              <div class="row"><span class="row-label">Operação</span><span class="row-value" id="meta-operacao"></span></div>
+              <div class="row"><span class="row-label">Natureza</span><span class="row-value" id="meta-natureza"></span></div>
+              <div class="row"><span class="row-label">Ambiente</span><span class="row-value" id="meta-ambiente"></span></div>
+              <div class="row"><span class="row-label">Versão do emissor</span><span class="row-value" id="meta-versao"></span></div>
+            </section>
+          </div>
+        </div>
+
+        <!-- Itens -->
+        <div class="panel" id="panel-itens" role="tabpanel" aria-label="Itens" hidden>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th class="col-n">#</th>
+                  <th class="col-code">Código</th>
+                  <th>Mercadoria</th>
+                  <th class="col-un">UN</th>
+                  <th class="col-num">Qtd</th>
+                  <th class="col-num">Preço unit.</th>
+                  <th class="col-num">Total</th>
+                </tr>
+              </thead>
+              <tbody id="items-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tributacao -->
+        <div class="panel" id="panel-tributos" role="tabpanel" aria-label="Tributação" hidden>
+          <div class="grid-2">
+            <section class="card">
+              <h3 class="card-title">ICMS</h3>
+              <div class="row"><span class="row-label">Base de cálculo</span><span class="row-value" id="trib-bc"></span></div>
+              <div class="row"><span class="row-label">ICMS normal</span><span class="row-value" id="trib-icms"></span></div>
+              <div class="row"><span class="row-label">Base de cálculo ST</span><span class="row-value" id="trib-bcst"></span></div>
+              <div class="row"><span class="row-label">ICMS substituição</span><span class="row-value" id="trib-st"></span></div>
+              <div class="row"><span class="row-label">Tributos aproximados</span><span class="row-value" id="trib-total"></span></div>
+            </section>
+
+            <section class="card">
+              <h3 class="card-title">Federais e reforma</h3>
+              <div class="row"><span class="row-label">PIS</span><span class="row-value" id="trib-pis"></span></div>
+              <div class="row"><span class="row-label">COFINS</span><span class="row-value" id="trib-cofins"></span></div>
+              <div class="row"><span class="row-label">IPI</span><span class="row-value" id="trib-ipi"></span></div>
+              <div class="row"><span class="row-label">IBS</span><span class="row-value" id="trib-ibs"></span></div>
+              <div class="row"><span class="row-label">CBS</span><span class="row-value" id="trib-cbs"></span></div>
+              <div class="row"><span class="row-label">Base IBS/CBS</span><span class="row-value" id="trib-bcibs"></span></div>
+            </section>
+          </div>
+        </div>
+
+        <!-- Protocolo -->
+        <div class="panel" id="panel-protocolo" role="tabpanel" aria-label="Protocolo e adicionais" hidden>
+          <div class="grid-2">
+            <section class="card">
+              <h3 class="card-title">Protocolo de autorização</h3>
+              <div class="row"><span class="row-label">Número</span><span class="row-value" id="prot-numero"></span></div>
+              <div class="row"><span class="row-label">Data / hora</span><span class="row-value" id="prot-data"></span></div>
+              <div class="row"><span class="row-label">Status</span><span class="row-value" id="prot-status"></span></div>
+              <div class="row"><span class="row-label">Chave de acesso</span><span class="row-value mono" id="prot-chave"></span></div>
+              <div class="row"><span class="row-label">Transporte</span><span class="row-value" id="prot-transporte"></span></div>
+            </section>
+
+            <section class="card" id="card-consulta" hidden>
+              <h3 class="card-title">Consulta e QR Code</h3>
+              <p class="card-note" id="consulta-note"></p>
+              <span class="eyebrow">Conteúdo do QR Code</span>
+              <p class="qr-text mono" id="consulta-qr"></p>
+              <a id="consulta-link" class="btn btn-secondary" target="_blank" rel="noopener">Abrir consulta</a>
+            </section>
+
+            <section class="card card-wide">
+              <h3 class="card-title">Informações adicionais</h3>
+              <p class="card-note" id="prot-adicionais"></p>
+            </section>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Carrega configuracoes locais e o client Supabase -->
+  <script src="config.js"></script>
+  <script src="supabase.js"></script>
+
+  <!-- Injeta dinamicamente o App Bridge (Header e validacao SSO) do Portal -->
+  <script>
+    (function () {
+      var bridgeScript = document.createElement('script');
+      bridgeScript.src = CONFIG.PORTAL_URL + 'assets/js/workbench-bridge.js';
+      bridgeScript.defer = true;
+      document.head.appendChild(bridgeScript);
+    })();
+  </script>
+
+  <!-- Logica da ferramenta -->
+  <script src="app.js"></script>
+</body>
+</html>
